@@ -1,16 +1,20 @@
-FROM composer:2 as vendor
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist
-
 FROM php:8.2-fpm-alpine
-RUN apk add --no-cache nginx bash git libzip-dev zip unzip oniguruma-dev icu-dev zlib-dev && \
+
+RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS git unzip libzip-dev oniguruma-dev icu-dev zlib-dev curl && \
+    apk add --no-cache nginx bash zip && \
     docker-php-ext-install pdo pdo_mysql zip mbstring intl && \
-    apk add --no-cache --virtual .build-deps $PHPIZE_DEPS && \
     apk del .build-deps || true
 
 WORKDIR /var/www/html
-COPY --from=vendor /app/vendor ./vendor
+
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Install PHP dependencies before copying full context to leverage cache
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist --no-scripts || composer install --no-dev --no-interaction --optimize-autoloader --prefer-dist
+
+# Copy app
 COPY . /var/www/html
 
 RUN chown -R www-data:www-data /var/www/html && chmod -R 755 storage bootstrap/cache
