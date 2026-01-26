@@ -43,6 +43,11 @@ class AppServiceProvider extends ServiceProvider
                     if (!File::exists($databasePath)) {
                         // create empty sqlite file
                         File::put($databasePath, '');
+                        // fallback to native functions if facade failed for any reason
+                        if (!File::exists($databasePath)) {
+                            @mkdir(dirname($databasePath), 0755, true);
+                            @touch($databasePath);
+                        }
                     }
                 }
             }
