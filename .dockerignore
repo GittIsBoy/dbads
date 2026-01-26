@@ -1,0 +1,9 @@
+vendor
+node_modules
+.git
+.github
+storage/framework/cache/data
+storage/logs
+tests
+README.md
+.env
