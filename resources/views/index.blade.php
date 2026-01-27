@@ -122,6 +122,7 @@
       </div>
     </main>
 
+    @include('loader')
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       // fetch real data from our API which proxies Adstera
@@ -130,18 +131,23 @@
       let chartRevenueInstance = null;
 
       async function loadStats() {
-        const qs = buildQueryFromFilters();
-        const sep = qs ? '?' : '?';
-        const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
-        const resp = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-store' } });
-        if (!resp.ok) {
-          console.error('Failed to load stats');
-          return;
+        if (window.appLoader) {
+          try { window.appLoader.showTableLoading('#statsTable tbody', 6); } catch(e){}
+          try { window.appLoader.show(); } catch(e){}
         }
-        const json = await resp.json();
-        const labels = json.labels || [];
-        const dataCounts = json.impressions || [];
-        const dataRevenue = json.revenue || [];
+        try {
+          const qs = buildQueryFromFilters();
+          const sep = qs ? '?' : '?';
+          const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
+          const resp = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-store' } });
+          if (!resp.ok) {
+            console.error('Failed to load stats');
+            return;
+          }
+          const json = await resp.json();
+          const labels = json.labels || [];
+          const dataCounts = json.impressions || [];
+          const dataRevenue = json.revenue || [];
 
         // show balance if provided by API
         const balanceEl = document.getElementById('balanceValue');
@@ -235,6 +241,20 @@
             tbody.appendChild(tr);
           }
         }
+          } catch (err) {
+            console.error(err);
+            if (window.appLoader) {
+              try { window.appLoader.hideTableLoading('#statsTable tbody'); } catch(e){}
+            }
+          } finally {
+            if (window.appLoader) {
+              try { window.appLoader.hide(); } catch(e){}
+              try {
+                const tbody = document.querySelector('#statsTable tbody');
+                if (tbody && tbody.dataset.prevHtml !== undefined) delete tbody.dataset.prevHtml;
+              } catch(e){}
+            }
+          }
       }
 
       function buildQueryFromFilters() {
@@ -256,6 +276,19 @@
         const sEl = document.getElementById('filterStart'); if (sEl) sEl.value = '';
         const fEl = document.getElementById('filterFinish'); if (fEl) fEl.value = '';
         loadStats().catch(err => console.error(err));
+      });
+
+      // set default date range on initial load if inputs are empty (7 days ago -> today)
+      document.addEventListener('DOMContentLoaded', () => {
+        try {
+          const fmt = d => d.toISOString().slice(0,10);
+          const today = new Date();
+          const sevenAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          const sEl = document.getElementById('filterStart');
+          const fEl = document.getElementById('filterFinish');
+          if (sEl && !sEl.value) sEl.value = fmt(sevenAgo);
+          if (fEl && !fEl.value) fEl.value = fmt(today);
+        } catch (e) {}
       });
 
       loadStats().catch(err => console.error(err));
