@@ -162,71 +162,117 @@
                 @include('calculaterate')
 
             </main>
+            @include('loader')
             <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
             <script>
                 async function loadStats() {
-                    const qs = buildQueryFromFilters();
-                    const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
-                    const resp = await fetch(url, {
-                        cache: 'no-store',
-                        headers: {
-                            'Cache-Control': 'no-store'
-                        }
-                    });
-                    if (!resp.ok) {
-                        console.error('Failed to load stats');
-                        return;
+                    if (window.appLoader) {
+                        try { window.appLoader.showTableLoading('#calculateTableBody', 5); } catch(e){}
+                        try { window.appLoader.show(); } catch(e){}
                     }
-                    const json = await resp.json();
-
-                    // Prefill date inputs from returned items range if present
                     try {
-                        const items = json.items || [];
-                        // sort items by revenue descending (largest revenue first)
-                        items.sort((a, b) => {
-                            const parseRev = (x) => {
-                                if (x === undefined || x === null) return 0;
-                                const s = String(x).replace(/,/g, '');
-                                const n = parseFloat(s);
-                                return Number.isFinite(n) ? n : 0;
-                            };
-                            const ra = parseRev(a.revenue ?? a.revenue_usd ?? 0);
-                            const rb = parseRev(b.revenue ?? b.revenue_usd ?? 0);
-                            return rb - ra;
+                        const qs = buildQueryFromFilters();
+                        const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
+                        const resp = await fetch(url, {
+                            cache: 'no-store',
+                            headers: {
+                                'Cache-Control': 'no-store'
+                            }
                         });
-                        items.sort((a, b) => {
-                            const ta = Date.parse(a.date || a.day || '') || 0;
-                            const tb = Date.parse(b.date || b.day || '') || 0;
-                            return tb - ta;
-                        });
-                        const startInput = document.getElementById('filterStart');
-                        const finishInput = document.getElementById('filterFinish');
-                        if (items.length > 0) {
-                            const newest = items[0].date || items[0].day || '';
-                            const oldest = items[items.length - 1].date || items[items.length - 1].day || '';
-                            if (finishInput && !finishInput.value && newest) finishInput.value = newest;
-                            if (startInput && !startInput.value && oldest) startInput.value = oldest;
+                        if (!resp.ok) {
+                            console.error('Failed to load stats');
+                            return;
                         }
-                    } catch (e) {}
+                        const json = await resp.json();
 
-                    // render calculate table rows
-                    try {
-                        const items = json.items || [];
-                        const tbody = document.getElementById('calculateTableBody');
-                        const colEntity = document.getElementById('colEntity');
-                        const filterType = document.getElementById('filter_type')?.value || 'domain';
-                        const filterValue = document.getElementById('filterValue')?.value || '';
-                        // set header
-                        colEntity.textContent = filterType === 'placement' ? 'Placement' : 'Domain';
-                        tbody.innerHTML = '';
-                        // pagination + totals logic (items already sorted by revenue desc)
-                        allItems = items;
-                        currentPage = 1;
-                        renderPage();
+                        // debug log response
+                        try { console.debug('calculate.loadStats response:', json); } catch(e){}
 
-                        // no select-all or per-row checkboxes (removed)
-                    } catch (e) {
-                        console.error('Failed to render calculate table', e);
+                        // Prefill date inputs from returned items range if present (robust extraction)
+                        try {
+                            const items = json.items || [];
+                            // sort items by revenue descending (largest revenue first)
+                            items.sort((a, b) => {
+                                const parseRev = (x) => {
+                                    if (x === undefined || x === null) return 0;
+                                    const s = String(x).replace(/,/g, '');
+                                    const n = parseFloat(s);
+                                    return Number.isFinite(n) ? n : 0;
+                                };
+                                const ra = parseRev(a.revenue ?? a.revenue_usd ?? 0);
+                                const rb = parseRev(b.revenue ?? b.revenue_usd ?? 0);
+                                return rb - ra;
+                            });
+                            items.sort((a, b) => {
+                                const ta = Date.parse(a.date || a.day || a.day_at || a.datetime || a.created_at || '') || 0;
+                                const tb = Date.parse(b.date || b.day || b.day_at || b.datetime || b.created_at || '') || 0;
+                                return tb - ta;
+                            });
+
+                            const extractDate = (s) => {
+                                if (!s) return null;
+                                const d = Date.parse(s);
+                                if (!isNaN(d)) return new Date(d).toISOString().slice(0,10);
+                                const m = String(s).match(/(\d{4}-\d{2}-\d{2})/);
+                                return m ? m[1] : null;
+                            };
+                            const dates = [];
+                            for (const it of items) {
+                                const cand = it.date || it.day || it.day_at || it.datetime || it.created_at || it.dayString || '';
+                                const d = extractDate(cand);
+                                if (d) dates.push(d);
+                            }
+                            if (dates.length === 0) {
+                                const topStart = extractDate(json.start_date || json.from || json.range_start || json.begin);
+                                const topEnd = extractDate(json.finish_date || json.to || json.range_end || json.end);
+                                if (topStart) dates.push(topStart);
+                                if (topEnd) dates.push(topEnd);
+                            }
+                            if (dates.length > 0) {
+                                dates.sort();
+                                const oldest = dates[0];
+                                const newest = dates[dates.length - 1];
+                                const startInput = document.getElementById('filterStart');
+                                const finishInput = document.getElementById('filterFinish');
+                                if (finishInput && !finishInput.value && newest) finishInput.value = newest;
+                                if (startInput && !startInput.value && oldest) startInput.value = oldest;
+                            }
+                        } catch (e) { console.error('prefill dates error', e); }
+
+                        // render calculate table rows
+                        try {
+                            const items = json.items || [];
+                            const tbody = document.getElementById('calculateTableBody');
+                            const colEntity = document.getElementById('colEntity');
+                            const filterType = document.getElementById('filter_type')?.value || 'domain';
+                            const filterValue = document.getElementById('filterValue')?.value || '';
+                            // set header
+                            colEntity.textContent = filterType === 'placement' ? 'Placement' : 'Domain';
+                            tbody.innerHTML = '';
+                            // pagination + totals logic (items already sorted by revenue desc)
+                            allItems = items;
+                            currentPage = 1;
+                            renderPage();
+
+                            // no select-all or per-row checkboxes (removed)
+                        } catch (e) {
+                            console.error('Failed to render calculate table', e);
+                        }
+
+                        // clear saved previous html so hideTableLoading won't restore it
+                        try {
+                            const tbody = document.getElementById('calculateTableBody');
+                            if (tbody && tbody.dataset.prevHtml !== undefined) delete tbody.dataset.prevHtml;
+                        } catch(e){}
+                    } catch (err) {
+                        console.error(err);
+                        if (window.appLoader) {
+                            try { window.appLoader.hideTableLoading('#calculateTableBody'); } catch(e){}
+                        }
+                    } finally {
+                        if (window.appLoader) {
+                            try { window.appLoader.hide(); } catch(e){}
+                        }
                     }
                 }
                 let allItems = [];
@@ -323,8 +369,9 @@
                     if (f) qp.set('finish_date', f);
                     if (type) qp.set('filter_type', type);
                     // include domain selection even when Value is All
-                    if (domainSel) qp.set('domain', domainSel);
-                    if (val) {
+                    // ignore placeholder or loading option values (e.g. 'Loading...')
+                    if (domainSel && domainSel !== 'Loading...') qp.set('domain', domainSel);
+                    if (val && val !== 'Loading...') {
                         if (type === 'domain') qp.set('domain', val);
                         else if (type === 'placement') qp.set('placement', val);
                     }
@@ -354,7 +401,7 @@
                     const sel = document.getElementById('filterValue');
                     if (!sel) return;
                     sel.disabled = true;
-                    sel.innerHTML = '<option>Loading...</option>';
+                    sel.innerHTML = '<option value="" disabled>Loading...</option>';
                     try {
                         let url;
                         if (type === 'placement') {
@@ -417,19 +464,32 @@
                     currentPage = 1;
                 });
 
-                // initial load: ensure default filter_type is domain when empty
-                const initialType = document.getElementById('filter_type')?.value || 'domain';
-                if (!document.getElementById('filter_type')?.value) {
-                    document.getElementById('filter_type').value = 'domain';
-                }
-                loadEntityOptions(initialType).catch(() => {});
+                                // initial load: ensure default filter_type is domain when empty
+                                const initialType = document.getElementById('filter_type')?.value || 'domain';
+                                if (!document.getElementById('filter_type')?.value) {
+                                    document.getElementById('filter_type').value = 'domain';
+                                }
+                                // set sensible default dates immediately (7 days ago -> today) when inputs are empty
+                                document.addEventListener('DOMContentLoaded', () => {
+                                    try {
+                                        const fmt = (d) => d.toISOString().slice(0,10);
+                                        const today = new Date();
+                                        const sevenAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                                        const startEl = document.getElementById('filterStart');
+                                        const finishEl = document.getElementById('filterFinish');
+                                        if (startEl && !startEl.value) startEl.value = fmt(sevenAgo);
+                                        if (finishEl && !finishEl.value) finishEl.value = fmt(today);
+                                    } catch (e) {}
+                                });
+
+                                loadEntityOptions(initialType).catch(() => {});
 
                 // helper to load domains into domainSelector
                 async function loadDomainsIntoSelector() {
                     const sel = document.getElementById('domainSelector');
                     if (!sel) return;
                     sel.disabled = true;
-                    sel.innerHTML = '<option>Loading...</option>';
+                    sel.innerHTML = '<option value="" disabled>Loading...</option>';
                     try {
                         const resp = await fetch('/api/adstera/domains', {
                             cache: 'no-store'

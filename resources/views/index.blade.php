@@ -122,6 +122,7 @@
       </div>
     </main>
 
+    @include('loader')
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       // fetch real data from our API which proxies Adstera
@@ -130,109 +131,128 @@
       let chartRevenueInstance = null;
 
       async function loadStats() {
-        const qs = buildQueryFromFilters();
-        const sep = qs ? '?' : '?';
-        const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
-        const resp = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-store' } });
-        if (!resp.ok) {
-          console.error('Failed to load stats');
-          return;
+        if (window.appLoader) {
+          try { window.appLoader.showTableLoading('#statsTable tbody', 6); } catch(e){}
+          try { window.appLoader.show(); } catch(e){}
         }
-        const json = await resp.json();
-        const labels = json.labels || [];
-        const dataCounts = json.impressions || [];
-        const dataRevenue = json.revenue || [];
-
-        // show balance if provided by API
-        const balanceEl = document.getElementById('balanceValue');
-        if (balanceEl) {
-          const bal = json.balance ?? null;
-          balanceEl.textContent = (typeof bal === 'number' ? '$' + bal.toFixed(2) : (bal ? String(bal) : '—'));
-        }
-
-        const dataCanvas = document.getElementById('chartData');
-        if (dataCanvas) {
-          const ctxData = dataCanvas.getContext('2d');
-          if (chartDataInstance) { chartDataInstance.destroy(); }
-          chartDataInstance = new Chart(ctxData, {
-            type: 'line',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: 'Jumlah Data',
-                data: dataCounts,
-                borderColor: 'rgba(54,162,235,1)',
-                backgroundColor: 'rgba(54,162,235,0.2)',
-                fill: true
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: { legend: { labels: { color: 'white' } } },
-              scales: { x: { ticks: { color: 'white' } }, y: { ticks: { color: 'white' } } }
-            }
-          });
-        }
-
-        const revCanvas = document.getElementById('chartRevenue');
-        if (revCanvas) {
-          const ctxRev = revCanvas.getContext('2d');
-          if (chartRevenueInstance) { chartRevenueInstance.destroy(); }
-          chartRevenueInstance = new Chart(ctxRev, {
-            type: 'bar',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: 'Pendapatan (USD)',
-                data: dataRevenue,
-                backgroundColor: 'rgba(75,192,192,0.6)'
-              }]
-            },
-            options: {
-              responsive: true,
-              plugins: { legend: { labels: { color: 'white' } } },
-              scales: { x: { ticks: { color: 'white' } }, y: { ticks: { color: 'white' } } }
-            }
-          });
-        }
-
-        // render table rows if items present
-        const items = json.items || [];
-        // sort by date descending so newest (today) shows first
-        items.sort((a, b) => {
-          const ta = Date.parse(a.date || a.day || '') || 0;
-          const tb = Date.parse(b.date || b.day || '') || 0;
-          return tb - ta;
-        });
-
-        // Prefill date inputs from the returned items range if inputs are empty
         try {
-          const startInput = document.getElementById('filterStart');
-          const finishInput = document.getElementById('filterFinish');
-          if (items.length > 0) {
-            const newest = items[0].date || items[0].day || '';
-            const oldest = items[items.length - 1].date || items[items.length - 1].day || '';
-            if (finishInput && !finishInput.value && newest) finishInput.value = newest;
-            if (startInput && !startInput.value && oldest) startInput.value = oldest;
+          const qs = buildQueryFromFilters();
+          const sep = qs ? '?' : '?';
+          const url = '/api/dashboard/stats' + (qs ? '?' + qs + '&_=' + Date.now() : '?_=' + Date.now());
+          const resp = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-store' } });
+          if (!resp.ok) {
+            console.error('Failed to load stats');
+            return;
           }
-        } catch (e) {
-          // ignore DOM errors
-        }
-        const tbody = document.querySelector('#statsTable tbody');
-        tbody.innerHTML = '';
-        if (items.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6">Tidak ada data</td></tr>';
-        } else {
-          for (const it of items) {
-            const tr = document.createElement('tr');
-            const date = it.date || it.day || '';
-            const impression = it.impression ?? it.impressions ?? 0;
-            const clicks = it.clicks ?? 0;
-            const ctr = it.ctr ?? '';
-            const cpm = it.cpm ?? '';
-            const revenue = it.revenue ?? 0;
-            tr.innerHTML = `<td>${date}</td><td>${impression}</td><td>${clicks}</td><td>${ctr}</td><td>${cpm}</td><td>${revenue}</td>`;
-            tbody.appendChild(tr);
+          const json = await resp.json();
+          const labels = json.labels || [];
+          const dataCounts = json.impressions || [];
+          const dataRevenue = json.revenue || [];
+
+          // show balance if provided by API
+          const balanceEl = document.getElementById('balanceValue');
+          if (balanceEl) {
+            const bal = json.balance ?? null;
+            balanceEl.textContent = (typeof bal === 'number' ? '$' + bal.toFixed(2) : (bal ? String(bal) : '—'));
+          }
+
+          const dataCanvas = document.getElementById('chartData');
+          if (dataCanvas) {
+            const ctxData = dataCanvas.getContext('2d');
+            if (chartDataInstance) { chartDataInstance.destroy(); }
+            chartDataInstance = new Chart(ctxData, {
+              type: 'line',
+              data: {
+                labels: labels,
+                datasets: [{
+                  label: 'Jumlah Data',
+                  data: dataCounts,
+                  borderColor: 'rgba(54,162,235,1)',
+                  backgroundColor: 'rgba(54,162,235,0.2)',
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: 'white' } } },
+                scales: { x: { ticks: { color: 'white' } }, y: { ticks: { color: 'white' } } }
+              }
+            });
+          }
+
+          const revCanvas = document.getElementById('chartRevenue');
+          if (revCanvas) {
+            const ctxRev = revCanvas.getContext('2d');
+            if (chartRevenueInstance) { chartRevenueInstance.destroy(); }
+            chartRevenueInstance = new Chart(ctxRev, {
+              type: 'bar',
+              data: {
+                labels: labels,
+                datasets: [{
+                  label: 'Pendapatan (USD)',
+                  data: dataRevenue,
+                  backgroundColor: 'rgba(75,192,192,0.6)'
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: 'white' } } },
+                scales: { x: { ticks: { color: 'white' } }, y: { ticks: { color: 'white' } } }
+              }
+            });
+          }
+
+          // render table rows if items present
+          const items = json.items || [];
+          // sort by date descending so newest (today) shows first
+          items.sort((a, b) => {
+            const ta = Date.parse(a.date || a.day || '') || 0;
+            const tb = Date.parse(b.date || b.day || '') || 0;
+            return tb - ta;
+          });
+
+          // Prefill date inputs from the returned items range if inputs are empty
+          try {
+            const startInput = document.getElementById('filterStart');
+            const finishInput = document.getElementById('filterFinish');
+            if (items.length > 0) {
+              const newest = items[0].date || items[0].day || '';
+              const oldest = items[items.length - 1].date || items[items.length - 1].day || '';
+              if (finishInput && !finishInput.value && newest) finishInput.value = newest;
+              if (startInput && !startInput.value && oldest) startInput.value = oldest;
+            }
+          } catch (e) {
+            // ignore DOM errors
+          }
+          const tbody = document.querySelector('#statsTable tbody');
+          tbody.innerHTML = '';
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6">Tidak ada data</td></tr>';
+          } else {
+            for (const it of items) {
+              const tr = document.createElement('tr');
+              const date = it.date || it.day || '';
+              const impression = it.impression ?? it.impressions ?? 0;
+              const clicks = it.clicks ?? 0;
+              const ctr = it.ctr ?? '';
+              const cpm = it.cpm ?? '';
+              const revenue = it.revenue ?? 0;
+              tr.innerHTML = `<td>${date}</td><td>${impression}</td><td>${clicks}</td><td>${ctr}</td><td>${cpm}</td><td>${revenue}</td>`;
+              tbody.appendChild(tr);
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          if (window.appLoader) {
+            try { window.appLoader.hideTableLoading('#statsTable tbody'); } catch(e){}
+          }
+        } finally {
+          if (window.appLoader) {
+            try { window.appLoader.hide(); } catch(e){}
+            try {
+              const tbody = document.querySelector('#statsTable tbody');
+              if (tbody && tbody.dataset.prevHtml !== undefined) delete tbody.dataset.prevHtml;
+            } catch(e){}
           }
         }
       }
